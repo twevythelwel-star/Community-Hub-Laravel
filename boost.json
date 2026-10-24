@@ -8,5 +8,10 @@
         "codex",
         "vscode"
     ],
-    "guidelines": []
+    "guidelines": true,
+    "skills": [
+        "livewire-development",
+        "inertia-react-development",
+        "tailwindcss-development"
+    ]
 }
