@@ -14,8 +14,10 @@ use App\Models\GatePass;
 use App\Models\InAppNotification;
 use App\Models\Property;
 use App\Models\User;
+use App\Services\GatePassEngine;
 use App\Services\GateScanner;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
@@ -177,7 +179,7 @@ class ControlledDelegatedAccessSystemTest extends TestCase
 
     public function test_gate_scanner_identifies_authorized_delegate_credential(): void
     {
-        \Illuminate\Support\Carbon::setTestNow('2026-10-04 14:00:00');
+        Carbon::setTestNow('2026-10-04 14:00:00');
 
         $guard = User::factory()->create(['role' => UserRole::Security, 'name' => 'Sergeant Hayes']);
         $homeowner = User::factory()->create(['role' => UserRole::Homeowner, 'name' => 'John Smith', 'lot' => 'Unit 14']);
@@ -216,7 +218,7 @@ class ControlledDelegatedAccessSystemTest extends TestCase
             ],
         ]);
 
-        $engine = app(\App\Services\GatePassEngine::class);
+        $engine = app(GatePassEngine::class);
         $issued = $engine->issueToken($pass, GateId::Gate01);
         $token = $issued['token'];
 
@@ -239,7 +241,7 @@ class ControlledDelegatedAccessSystemTest extends TestCase
         $this->assertNotNull($scanEvent);
 
         // Test Late-Night (2:00 AM) Suspicious Access Alert
-        \Illuminate\Support\Carbon::setTestNow('2026-10-05 02:00:00');
+        Carbon::setTestNow('2026-10-05 02:00:00');
         $nightIssued = $engine->issueToken($pass, GateId::Gate01);
         $scanner->scan($nightIssued['token'], GateId::Gate01, $guard);
 
@@ -248,13 +250,13 @@ class ControlledDelegatedAccessSystemTest extends TestCase
             ->first();
         $this->assertNotNull($suspiciousEvent);
 
-        $notification = \App\Models\InAppNotification::where('user_id', $homeowner->id)
+        $notification = InAppNotification::where('user_id', $homeowner->id)
             ->where('category', 'security')
             ->first();
         $this->assertNotNull($notification);
         $this->assertStringContainsString('Notice: Delegate Mary Smith Gate Access', $notification->title);
 
-        \Illuminate\Support\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 
     public function test_homeowner_can_configure_emergency_continuity_plan(): void
@@ -384,7 +386,7 @@ class ControlledDelegatedAccessSystemTest extends TestCase
 
         // Homeowner creates Long-Term Occupant Michael Brown (Oct 10, 2026 to Apr 10, 2027).
         // Pinned to that day: a start date in the past is refused.
-        \Illuminate\Support\Carbon::setTestNow('2026-10-10 09:00:00');
+        Carbon::setTestNow('2026-10-10 09:00:00');
         $response = $this->actingAs($homeowner)->postJson('/dashboard/delegation', [
             'name' => 'Michael Brown',
             'email' => 'michael.brown@residence-guest.com',
@@ -424,8 +426,8 @@ class ControlledDelegatedAccessSystemTest extends TestCase
         $this->assertEquals('Unit 14, Royal Palm Drive', $pass->property);
 
         // Security scan during authorized window (Oct 15, 2026)
-        \Illuminate\Support\Carbon::setTestNow('2026-10-15 14:00:00');
-        $engine = app(\App\Services\GatePassEngine::class);
+        Carbon::setTestNow('2026-10-15 14:00:00');
+        $engine = app(GatePassEngine::class);
         $issued = $engine->issueToken($pass, GateId::Gate01);
 
         $scanner = app(GateScanner::class);
@@ -446,60 +448,64 @@ class ControlledDelegatedAccessSystemTest extends TestCase
         $this->assertTrue($report['requiresIdVerification']);
 
         // Automatic expiration: Scan after April 10, 2027 (e.g. April 12, 2027)
-        \Illuminate\Support\Carbon::setTestNow('2027-04-12 09:00:00');
+        Carbon::setTestNow('2027-04-12 09:00:00');
         $expiredToken = $engine->issueToken($pass, GateId::Gate01);
         $expiredResult = $scanner->scan($expiredToken['token'], GateId::Gate01, $guard);
 
         $this->assertEquals('REJECT', $expiredResult['decision']);
         $this->assertEquals('DENY', $expiredResult['report']['status']);
 
-        \Illuminate\Support\Carbon::setTestNow();
+        Carbon::setTestNow();
     }
 
     public function test_schedule_rule_enforcement_at_scanner(): void
     {
-        $homeowner = User::factory()->create(['role' => UserRole::Homeowner, 'name' => 'Eleanor Vance', 'lot' => 'Unit 14']);
-        $guard = User::factory()->create(['role' => UserRole::Security, 'name' => 'Officer Miller']);
+        Carbon::setTestNow('2026-10-12 10:00:00');
 
-        // Caregiver authorized only Mon-Fri from 06:00 to 21:00
-        $delegation = DelegatedAccess::create([
-            'grantor_user_id' => $homeowner->id,
-            'name' => 'Sarah Caregiver',
-            'email' => 'sarah.caregiver@example.com',
-            'relationship' => 'Caregiver',
-            'access_level' => 'Caregiver',
-            'authorization_type' => 'caregiver',
-            'status' => 'active',
-            'starts_at' => now()->subDay(),
-            'expires_at' => now()->addYear(),
-            'access_rules' => [
-                'days_permitted' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-                'time_window' => ['start' => '06:00', 'end' => '21:00'],
-                'gate_access' => true,
-            ],
-        ]);
+        try {
+            $homeowner = User::factory()->create(['role' => UserRole::Homeowner, 'name' => 'Eleanor Vance', 'lot' => 'Unit 14']);
+            $guard = User::factory()->create(['role' => UserRole::Security, 'name' => 'Officer Miller']);
 
-        $engine = app(\App\Services\GatePassEngine::class);
-        $pass = $delegation->issueDelegateGatePass($engine, $homeowner);
+            // Caregiver authorized only Mon-Fri from 06:00 to 21:00
+            $delegation = DelegatedAccess::create([
+                'grantor_user_id' => $homeowner->id,
+                'name' => 'Sarah Caregiver',
+                'email' => 'sarah.caregiver@example.com',
+                'relationship' => 'Caregiver',
+                'access_level' => 'Caregiver',
+                'authorization_type' => 'caregiver',
+                'status' => 'active',
+                'starts_at' => now()->subDay(),
+                'expires_at' => now()->addYear(),
+                'access_rules' => [
+                    'days_permitted' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+                    'time_window' => ['start' => '06:00', 'end' => '21:00'],
+                    'gate_access' => true,
+                ],
+            ]);
 
-        // Test scan at 22:30 (outside operational window)
-        \Illuminate\Support\Carbon::setTestNow('2026-10-12 22:30:00'); // Monday 10:30 PM
-        $token = $engine->issueToken($pass, GateId::Gate01);
+            $engine = app(GatePassEngine::class);
+            $pass = $delegation->issueDelegateGatePass($engine, $homeowner);
 
-        $scanner = app(GateScanner::class);
-        $scanResult = $scanner->scan($token['token'], GateId::Gate01, $guard);
+            // Test scan at 22:30 (outside operational window)
+            Carbon::setTestNow('2026-10-12 22:30:00'); // Monday 10:30 PM
+            $token = $engine->issueToken($pass, GateId::Gate01);
 
-        $this->assertEquals('REJECT', $scanResult['decision']);
-        $this->assertStringContainsString('Outside authorized operational hours', $scanResult['report']['primaryReason']);
+            $scanner = app(GateScanner::class);
+            $scanResult = $scanner->scan($token['token'], GateId::Gate01, $guard);
 
-        // Test scan at 14:00 (within operational window)
-        \Illuminate\Support\Carbon::setTestNow('2026-10-12 14:00:00'); // Monday 2:00 PM
-        $validToken = $engine->issueToken($pass, GateId::Gate01);
-        $validResult = $scanner->scan($validToken['token'], GateId::Gate01, $guard);
+            $this->assertEquals('REJECT', $scanResult['decision']);
+            $this->assertStringContainsString('Outside authorized operational hours', $scanResult['report']['primaryReason']);
 
-        $this->assertEquals('CHECK_IN', $validResult['decision']);
-        $this->assertEquals('CAREGIVER', $validResult['report']['authorizationType']);
+            // Test scan at 14:00 (within operational window)
+            Carbon::setTestNow('2026-10-12 14:00:00'); // Monday 2:00 PM
+            $validToken = $engine->issueToken($pass, GateId::Gate01);
+            $validResult = $scanner->scan($validToken['token'], GateId::Gate01, $guard);
 
-        \Illuminate\Support\Carbon::setTestNow();
+            $this->assertEquals('CHECK_IN', $validResult['decision']);
+            $this->assertEquals('CAREGIVER', $validResult['report']['authorizationType']);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }

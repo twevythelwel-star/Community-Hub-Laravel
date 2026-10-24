@@ -2,15 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Actions\Visitors\RegisterBulkVisitorsAction;
 use App\Enums\UserRole;
-use App\Models\Property;
 use App\Models\Renter;
 use App\Models\User;
 use App\Models\Visitor;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class BulkVisitorTimezoneTest extends TestCase
@@ -167,28 +164,34 @@ class BulkVisitorTimezoneTest extends TestCase
 
     public function test_temporary_homeowner_stay_timeframe_enforced_in_utc(): void
     {
-        $tempResident = User::factory()->role(UserRole::TemporaryHomeowner)->create();
+        Carbon::setTestNow('2026-10-15 12:00:00');
 
-        // Approved stay: Oct 10 to Oct 20, 2026
-        Renter::create([
-            'user_id' => $tempResident->id,
-            'name' => $tempResident->name,
-            'unit_lot' => 'Lot 42',
-            'lease_start' => '2026-10-10',
-            'lease_end' => '2026-10-20',
-            'is_active' => true,
-        ]);
+        try {
+            $tempResident = User::factory()->role(UserRole::TemporaryHomeowner)->create();
 
-        // Attempt to book visitor on Oct 25 (after lease expiry)
-        $response = $this->actingAs($tempResident)->post('/dashboard/visitors/bulk', [
-            'expected_at' => '2026-10-25 12:00:00',
-            'timezone' => 'America/Jamaica',
-            'visitors' => [
-                ['name' => 'Expired Stay Guest'],
-            ],
-        ]);
+            // Approved stay: Oct 10 to Oct 20, 2026
+            Renter::create([
+                'user_id' => $tempResident->id,
+                'name' => $tempResident->name,
+                'unit_lot' => 'Lot 42',
+                'lease_start' => '2026-10-10',
+                'lease_end' => '2026-10-20',
+                'is_active' => true,
+            ]);
 
-        $response->assertSessionHasErrors('expected_at');
-        $this->assertDatabaseMissing('visitors', ['name' => 'Expired Stay Guest']);
+            // Attempt to book visitor on Oct 25 (after lease expiry)
+            $response = $this->actingAs($tempResident)->post('/dashboard/visitors/bulk', [
+                'expected_at' => '2026-10-25 12:00:00',
+                'timezone' => 'America/Jamaica',
+                'visitors' => [
+                    ['name' => 'Expired Stay Guest'],
+                ],
+            ]);
+
+            $response->assertSessionHasErrors('expected_at');
+            $this->assertDatabaseMissing('visitors', ['name' => 'Expired Stay Guest']);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 }
