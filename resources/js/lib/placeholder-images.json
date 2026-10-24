@@ -1,0 +1,20 @@
+
+{
+    "placeholderData": {
+        "businesses": [
+            { "id": "biz_1", "name": "Local Eats", "logoUrl": "https://picsum.photos/seed/leats/100/100", "aiHint": "restaurant logo" },
+            { "id": "biz_2", "name": "Community Fit", "logoUrl": "https://picsum.photos/seed/cfit/100/100", "aiHint": "fitness logo" },
+            { "id": "biz_3", "name": "Sparkle Car Wash", "logoUrl": "https://picsum.photos/seed/scar/100/100", "aiHint": "car wash logo" }
+        ],
+        "vouchers": [
+            { "id": "v_1", "businessId": "biz_1", "title": "Free Delivery Friday!", "description": "Get free delivery on all orders over $20 this Friday." },
+            { "id": "v_2", "businessId": "biz_2", "title": "50% off First Month", "description": "Join our gym and get your first month of membership for half price." },
+            { "id": "v_3", "businessId": "biz_3", "title": "Weekend Wash Special", "description": "Get a full-service car wash for just $15 this weekend." }
+        ],
+        "foodApps": [
+            { "id": "fa_1", "name": "Uber Eats", "logoUrl": "https://picsum.photos/seed/uber/100/100", "websiteUrl": "https://www.ubereats.com", "aiHint": "food delivery logo" },
+            { "id": "fa_2", "name": "DoorDash", "logoUrl": "https://picsum.photos/seed/ddash/100/100", "websiteUrl": "https://www.doordash.com", "aiHint": "food delivery logo" },
+            { "id": "fa_3", "name": "Grubhub", "logoUrl": "https://picsum.photos/seed/ghub/100/100", "websiteUrl": "https://www.grubhub.com", "aiHint": "food delivery logo" }
+        ]
+    }
+}

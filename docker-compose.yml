@@ -1,0 +1,72 @@
+# Production-style stack: web, queue worker, scheduler and MySQL.
+#
+#   cp .env.production.example .env.production   # then fill in the secrets
+#   docker compose --env-file .env.production up -d --build
+#
+# --env-file matters: without it Compose fills ${DB_PASSWORD} and friends
+# from laravel/.env, which is the local development file.
+#
+# The app is then on http://localhost:8080. Put a TLS-terminating proxy
+# (Caddy, nginx, a load balancer) in front of it for anything public.
+
+x-app: &app
+  build: .
+  image: community-hub:latest
+  env_file: .env.production
+  restart: unless-stopped
+  volumes:
+    # Shared by all three containers: the queue worker writes visitor-pass QR
+    # images here and the web container serves them.
+    - storage:/var/www/html/storage
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *app
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      # Only this container migrates, so the three do not race on start-up.
+      RUN_MIGRATIONS: "true"
+
+  # Sends visitor-pass notifications (SendVisitorPassNotification and
+  # VisitorPassEmailNotification) and delivers broadcast events. Without it,
+  # QUEUE_CONNECTION=database jobs pile up in the jobs table and never run.
+  queue:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "--tries=3", "--backoff=10", "--max-time=3600", "--sleep=3"]
+    stop_grace_period: 60s
+    healthcheck:
+      disable: true
+
+  # Runs routes/console.php: gate-pass nonce pruning (hourly) and visitor
+  # no-show expiry (every 15 minutes). Without it, stale pre-clearances stay
+  # valid at the gate indefinitely.
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+    healthcheck:
+      disable: true
+
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-community_hub}
+      MYSQL_USER: ${DB_USERNAME:-community_hub}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.production or the shell}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env.production or the shell}
+    volumes:
+      - mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  storage:
+  mysql:
