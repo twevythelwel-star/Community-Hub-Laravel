@@ -3,11 +3,6 @@
         "claude_code",
         "codex"
     ],
-    "editors": [
-        "claude_code",
-        "codex",
-        "vscode"
-    ],
     "guidelines": true,
     "skills": [
         "livewire-development",
