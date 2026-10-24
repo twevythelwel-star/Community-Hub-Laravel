@@ -135,7 +135,8 @@ return new class extends Migration
                 $table->json('credentials_masked')->nullable();
                 $table->timestamps();
 
-                $table->unique(['community_id', 'provider', 'environment']);
+                // Named explicitly: the generated name is 65 characters, over MySQL's 64.
+                $table->unique(['community_id', 'provider', 'environment'], 'payment_provider_configs_community_provider_env_unique');
             });
         }
 

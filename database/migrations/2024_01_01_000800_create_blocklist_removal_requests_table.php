@@ -30,7 +30,8 @@ return new class extends Migration
             $table->index(['status', 'created_at']);
             // One open request per resident per entry; re-requesting reopens the
             // existing row rather than stacking duplicates for admins to wade through.
-            $table->unique(['blocklist_entry_id', 'requested_by']);
+            // Named explicitly: the generated name is 65 characters, over MySQL's 64.
+            $table->unique(['blocklist_entry_id', 'requested_by'], 'blocklist_removal_requests_entry_requester_unique');
         });
     }
 
